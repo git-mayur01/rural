@@ -144,10 +144,14 @@ export default function CasesScreen() {
           <Ionicons name="scale" size={24} color="#FF7A00" />
           <Text style={styles.logoText}>NyAI-Setu</Text>
         </View>
-        <Text style={styles.headerTitle}>{strings.myCases}</Text>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{getInitials()}</Text>
         </View>
+      </View>
+
+      {/* Title (match Document Vault header style) */}
+      <View style={styles.titleContainer}>
+        <Text style={styles.title}>{strings.myCases}</Text>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
@@ -160,9 +164,6 @@ export default function CasesScreen() {
             <Ionicons name="folder-open-outline" size={80} color="rgba(255, 122, 0, 0.35)" />
             <Text style={styles.emptyTitle}>{strings.noCases}</Text>
             <Text style={styles.emptyText}>{strings.noCasesHint}</Text>
-            <TouchableOpacity style={styles.emptyButton} onPress={goToChat}>
-              <Text style={styles.emptyButtonText}>{strings.startNewCase}</Text>
-            </TouchableOpacity>
           </View>
         ) : (
           cases.map((caseItem: any) => (
@@ -249,7 +250,7 @@ export default function CasesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0E0E0E',
+    backgroundColor: '#1A0A00',
   },
   header: {
     flexDirection: 'row',
@@ -274,6 +275,17 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#FF7A00',
+  },
+  titleContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 24,
+  },
+  title: {
+    fontSize: 40,
+    fontWeight: 'bold',
+    color: '#FF7A00',
+    marginBottom: 4,
+    letterSpacing: 2,
   },
   avatar: {
     width: 40,

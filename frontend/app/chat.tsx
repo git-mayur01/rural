@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { addDoc, collection, doc, getDoc, getDocs, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import Constants from 'expo-constants';
+import * as DocumentPicker from 'expo-document-picker';
+import * as Speech from 'expo-speech';
 import { useAppStore } from '../store/useAppStore';
 import { getLanguageStrings } from '../lib/languages';
 import { sendLegalMessage } from '../lib/gemini';
@@ -51,6 +53,10 @@ export default function ChatScreen() {
     message: '',
   });
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+  const [newCaseConfirmVisible, setNewCaseConfirmVisible] = useState(false);
+  const [voiceInfoVisible, setVoiceInfoVisible] = useState(false);
+  const [mode, setMode] = useState<'chat' | 'speak'>('chat');
+  const [isPickingDoc, setIsPickingDoc] = useState(false);
 
   useEffect(() => {
     if (currentCaseId) {
@@ -124,13 +130,53 @@ export default function ChatScreen() {
   };
 
   const handleNewCase = async () => {
+    setNewCaseConfirmVisible(true);
+  };
+
+  const confirmNewCase = async () => {
+    setNewCaseConfirmVisible(false);
     clearCurrentCase();
+    setMessages([]);
     const caseId = await createCaseOnFirstMessage();
     if (!caseId) {
       setErrorModal({
         visible: true,
         message: language === 'en' ? 'Unable to create case.' : 'प्रकरण तयार करण्यात अयशस्वी.',
       });
+    }
+  };
+
+  const pickDocument = async () => {
+    if (isPickingDoc) return;
+    setIsPickingDoc(true);
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+        type: ['application/pdf', 'image/*', '*/*'],
+      });
+      if (result.canceled || !result.assets?.length) return;
+      const asset = result.assets[0];
+      setInputText((prev) => (prev ? `${prev}\n[Attachment: ${asset.name}]` : `[Attachment: ${asset.name}]`));
+    } catch (e: any) {
+      setErrorModal({
+        visible: true,
+        message: (language === 'en' ? 'Failed to pick document.' : 'दस्तऐवज निवडण्यात अयशस्वी.') + (e?.message ? ` ${e.message}` : ''),
+      });
+    } finally {
+      setIsPickingDoc(false);
+    }
+  };
+
+  const speakText = (text: string) => {
+    try {
+      Speech.stop();
+      Speech.speak(text, {
+        language: language === 'mr' ? 'mr-IN' : language === 'hi' ? 'hi-IN' : 'en-IN',
+        rate: 0.95,
+      });
+    } catch {
+      // ignore
     }
   };
 
@@ -212,6 +258,9 @@ export default function ChatScreen() {
 
       addMessage(assistantMessage);
       await storeMessage(activeCaseId, 'ai', assistantMessage.content);
+      if (mode === 'speak') {
+        speakText(assistantMessage.content);
+      }
 
       const structuredSteps = (response.actionSteps || []).map((step, idx) => ({
         id: `${Date.now()}-${idx}`,
@@ -289,7 +338,6 @@ export default function ChatScreen() {
           <Ionicons name="scale" size={24} color="#FF6B00" />
           <Text style={styles.logoText}>NyAI-Setu</Text>
         </View>
-        <Text style={styles.headerTitle}>{strings.vakilSahabAI}</Text>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{getInitials()}</Text>
         </View>
@@ -307,15 +355,21 @@ export default function ChatScreen() {
       </View>
 
       <View style={styles.caseActionRow}>
-        <TouchableOpacity style={[styles.caseActionBtn, currentCaseId ? styles.caseActionActive : null]}>
-          <Ionicons name="document-text-outline" size={18} color={currentCaseId ? '#000' : '#FF6B00'} />
-          <Text style={[styles.caseActionText, currentCaseId ? styles.caseActionTextActive : null]}>
+        <TouchableOpacity
+          style={styles.caseActionBtn}
+          activeOpacity={0.85}
+          onPress={() => setMode('chat')}
+        >
+          <Ionicons name="document-text-outline" size={18} color="#FF7A00" />
+          <Text style={styles.caseActionText}>
             {language === 'en' ? 'Active Case' : 'सक्रिय प्रकरण'}
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.caseActionBtnPrimary} onPress={handleNewCase}>
-          <Ionicons name="add-circle-outline" size={18} color="#000" />
-          <Text style={styles.caseActionTextPrimary}>{strings.newCase}</Text>
+        <TouchableOpacity style={styles.caseActionBtnPrimary} onPress={handleNewCase} activeOpacity={0.85}>
+          <Ionicons name="add" size={18} color="#000" />
+          <Text style={styles.caseActionTextPrimary}>
+            {language === 'en' ? 'New Case' : strings.newCase}
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -325,6 +379,44 @@ export default function ChatScreen() {
         style={{ flex: 1 }}
         keyboardVerticalOffset={isKeyboardVisible ? 0 : 64}
       >
+        <View style={styles.modeRow}>
+          <TouchableOpacity
+            style={[styles.modeBtn, mode === 'chat' && styles.modeBtnActive]}
+            onPress={() => setMode('chat')}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.modeText, mode === 'chat' && styles.modeTextActive]}>CHAT</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modeBtn, mode === 'speak' && styles.modeBtnActive]}
+            onPress={() => setMode('speak')}
+            activeOpacity={0.85}
+          >
+            <Text style={[styles.modeText, mode === 'speak' && styles.modeTextActive]}>SPEAK</Text>
+          </TouchableOpacity>
+        </View>
+
+        {mode === 'speak' ? (
+          <View style={styles.speakContainer}>
+            <View style={styles.speakAvatarOuter}>
+              <View style={styles.speakAvatarInner}>
+                <Ionicons name="scale" size={56} color="#FF7A00" />
+              </View>
+            </View>
+            <Text style={styles.speakTitle}>
+              {language === 'en' ? 'Vakil Sahab is ready' : 'वकील साहब तयार आहेत'}
+            </Text>
+            <Text style={styles.speakHint}>
+              {language === 'en'
+                ? 'Tap mic to speak. AI replies will be read aloud.'
+                : 'माइक दाबा आणि बोला. AI उत्तर मोठ्याने वाचले जाईल.'}
+            </Text>
+            <TouchableOpacity style={styles.speakMicBtn} onPress={() => setVoiceInfoVisible(true)} activeOpacity={0.85}>
+              <Ionicons name="mic" size={26} color="#000" />
+              <Text style={styles.speakMicText}>{language === 'en' ? 'Speak' : 'बोला'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
         <ScrollView
           ref={scrollViewRef}
           style={styles.chatArea}
@@ -335,6 +427,10 @@ export default function ChatScreen() {
             <View style={styles.emptyState}>
               <Ionicons name="scale" size={64} color="rgba(255, 107, 0, 0.3)" />
               <Text style={styles.emptyText}>{strings.describeQuery}</Text>
+              <TouchableOpacity style={styles.speakEmptyBtn} onPress={() => setMode('speak')} activeOpacity={0.85}>
+                <Ionicons name="mic" size={28} color="#000" />
+                <Text style={styles.speakEmptyText}>{language === 'en' ? 'Speak' : 'बोला'}</Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -393,22 +489,23 @@ export default function ChatScreen() {
             </View>
           )}
         </ScrollView>
+        )}
 
         {/* Input Bar */}
         <View style={styles.inputBar}>
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity style={styles.iconButton} onPress={pickDocument} disabled={isPickingDoc}>
             <Ionicons name="attach" size={24} color="#A0785A" />
           </TouchableOpacity>
           <TextInput
             style={styles.textInput}
-            placeholder={strings.describeQuery}
+            placeholder="Describe your legal problem..."
             placeholderTextColor="#A0785A"
             value={inputText}
             onChangeText={setInputText}
             multiline
             maxLength={500}
           />
-          <TouchableOpacity style={styles.iconButton}>
+          <TouchableOpacity style={styles.iconButton} onPress={() => setVoiceInfoVisible(true)}>
             <Ionicons name="mic-outline" size={24} color="#A0785A" />
           </TouchableOpacity>
           <TouchableOpacity
@@ -432,6 +529,27 @@ export default function ChatScreen() {
             variant: 'primary',
           },
         ]}
+      />
+      <ThemedModal
+        visible={newCaseConfirmVisible}
+        title={language === 'en' ? 'New Case' : 'नवीन प्रकरण'}
+        message={'Start a new case? Current conversation will be cleared.'}
+        onClose={() => setNewCaseConfirmVisible(false)}
+        actions={[
+          { label: language === 'en' ? 'Cancel' : 'रद्द करा', onPress: () => setNewCaseConfirmVisible(false), variant: 'secondary' },
+          { label: language === 'en' ? 'Create Case' : 'प्रकरण तयार करा', onPress: confirmNewCase, variant: 'primary' },
+        ]}
+      />
+      <ThemedModal
+        visible={voiceInfoVisible}
+        title={language === 'en' ? 'Voice' : 'आवाज'}
+        message={
+          language === 'en'
+            ? 'Speech-to-text is not available in Expo Go by default. Use your keyboard voice typing, or we can add native STT later (dev build).'
+            : 'Expo Go मध्ये speech-to-text डीफॉल्टने उपलब्ध नाही. कीबोर्ड voice typing वापरा, किंवा नंतर native STT जोडू शकतो (dev build).'
+        }
+        onClose={() => setVoiceInfoVisible(false)}
+        actions={[{ label: 'OK', onPress: () => setVoiceInfoVisible(false), variant: 'primary' }]}
       />
     </SafeAreaView>
   );
@@ -543,29 +661,24 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   caseActionBtn: {
-    flex: 1,
+    flex: 1.35,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#1A1A1A',
-    borderWidth: 1,
-    borderColor: 'rgba(255,122,0,0.35)',
+    backgroundColor: '#000',
+    borderWidth: 1.5,
+    borderColor: '#FF7A00',
     borderRadius: 16,
     paddingVertical: 12,
   },
-  caseActionActive: {
-    backgroundColor: '#FF7A00',
-  },
   caseActionText: {
     color: '#FF7A00',
-    fontWeight: '700',
-  },
-  caseActionTextActive: {
-    color: '#000',
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   caseActionBtnPrimary: {
-    flex: 1,
+    flex: 0.85,
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
@@ -576,7 +689,8 @@ const styles = StyleSheet.create({
   },
   caseActionTextPrimary: {
     color: '#000',
-    fontWeight: '700',
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   chatArea: {
     flex: 1,
@@ -595,6 +709,25 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#A0785A',
     marginTop: 16,
+    textAlign: 'center',
+  },
+  speakEmptyBtn: {
+    marginTop: 22,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: '#FF7A00',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderWidth: 6,
+    borderColor: 'rgba(255, 122, 0, 0.25)',
+  },
+  speakEmptyText: {
+    color: '#000',
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
   messageContainer: {
     marginBottom: 20,
@@ -659,6 +792,84 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 107, 0, 0.2)',
     marginBottom: 0,
+  },
+  modeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 6,
+  },
+  modeBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    backgroundColor: '#2B2B2B',
+  },
+  modeBtnActive: {
+    backgroundColor: '#FF7A00',
+  },
+  modeText: {
+    color: '#D0D0D0',
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  modeTextActive: {
+    color: '#000',
+  },
+  speakContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  speakAvatarOuter: {
+    width: 190,
+    height: 190,
+    borderRadius: 95,
+    backgroundColor: 'rgba(255, 122, 0, 0.15)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 18,
+  },
+  speakAvatarInner: {
+    width: 140,
+    height: 140,
+    borderRadius: 70,
+    backgroundColor: '#1A1A1A',
+    borderWidth: 2,
+    borderColor: 'rgba(255, 122, 0, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  speakTitle: {
+    color: '#FFF',
+    fontSize: 20,
+    fontWeight: '800',
+    marginBottom: 8,
+  },
+  speakHint: {
+    color: '#A0785A',
+    textAlign: 'center',
+    fontSize: 14,
+    lineHeight: 20,
+    marginBottom: 22,
+  },
+  speakMicBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#FF7A00',
+    paddingHorizontal: 22,
+    paddingVertical: 14,
+    borderRadius: 28,
+  },
+  speakMicText: {
+    color: '#000',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 1,
   },
   iconButton: {
     padding: 8,
