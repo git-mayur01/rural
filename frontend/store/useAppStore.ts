@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from 'firebase/auth';
 import { UserProfile, Message, Language } from '../types';
 
@@ -37,7 +39,9 @@ interface AppState {
   resetAll: () => void;
 }
 
-export const useAppStore = create<AppState>((set) => ({
+export const useAppStore = create<AppState>()(
+  persist(
+    (set) => ({
   // Initial state
   user: null,
   userProfile: null,
@@ -53,7 +57,7 @@ export const useAppStore = create<AppState>((set) => ({
 
   // Actions
   setUser: (user) => set({ user }),
-  setUserProfile: (profile) => set({ userProfile, language: profile?.language || 'mr' }),
+  setUserProfile: (profile) => set({ userProfile: profile, language: profile?.language || 'mr' }),
   setLanguage: (lang) => set({ language: lang }),
   setCurrentCase: (caseId) => set({ currentCaseId: caseId }),
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
@@ -92,4 +96,11 @@ export const useAppStore = create<AppState>((set) => ({
       caseStatus: 'fact_gathering',
       documents: { fir: '', nhrc: '', magistrate: '' },
     }),
-}));
+    }),
+    {
+      name: 'nyai-setu-store',
+      storage: createJSONStorage(() => AsyncStorage),
+      partialize: (state) => ({ language: state.language }),
+    }
+  )
+);

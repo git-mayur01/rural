@@ -4,15 +4,25 @@ import AppLayoutWrapper from '../components/AppLayoutWrapper';
 import { useEffect } from 'react';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import { NotoSansDevanagari_400Regular, NotoSansDevanagari_700Bold } from '@expo-google-fonts/noto-sans-devanagari';
+import { Text, TextInput } from 'react-native';
 
 // Prevent splash screen from auto-hiding
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({});
+  const [fontsLoaded] = useFonts({
+    NotoSansDevanagari_400Regular,
+    NotoSansDevanagari_700Bold,
+  });
 
   useEffect(() => {
     if (fontsLoaded) {
+      // Ensure Marathi/Hindi glyphs render correctly across the app.
+      Text.defaultProps = Text.defaultProps || {};
+      Text.defaultProps.style = [{ fontFamily: 'NotoSansDevanagari_400Regular' }, Text.defaultProps.style];
+      TextInput.defaultProps = TextInput.defaultProps || {};
+      TextInput.defaultProps.style = [{ fontFamily: 'NotoSansDevanagari_400Regular' }, TextInput.defaultProps.style];
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded]);
@@ -36,6 +46,10 @@ export default function RootLayout() {
           <Stack.Screen name="verify-otp" />
           <Stack.Screen name="forgot-password" />
           <Stack.Screen name="profile-setup" />
+          <Stack.Screen name="edit-profile" />
+          <Stack.Screen name="about" />
+          <Stack.Screen name="privacy" />
+          <Stack.Screen name="help-support" />
           <Stack.Screen name="chat" />
           <Stack.Screen name="cases" />
           <Stack.Screen name="vault" />

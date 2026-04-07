@@ -44,7 +44,7 @@ export default function AuthScreen() {
       setUserProfile(profile);
 
       if (!profile) {
-        router.replace('/signup');
+        router.replace('/profile-setup');
       } else {
         router.replace('/chat');
       }

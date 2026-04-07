@@ -14,7 +14,7 @@ const BottomNav = () => {
   const strings = getLanguageStrings(language);
 
   // Don't show on auth screens
-  if (pathname === '/auth' || pathname === '/signup' || pathname === '/verify-otp' || pathname === '/forgot-password' || pathname === '/profile-setup' || pathname === '/') {
+  if (pathname === '/auth' || pathname === '/signup' || pathname === '/verify-otp' || pathname === '/forgot-password' || pathname === '/profile-setup' || pathname === '/edit-profile' || pathname === '/about' || pathname === '/privacy' || pathname === '/help-support' || pathname === '/') {
     return null;
   }
 

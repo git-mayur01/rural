@@ -8,6 +8,8 @@ export interface UserProfile {
   district: string;
   dateOfBirth: string;
   language: 'mr' | 'hi' | 'en'; // Marathi, Hindi, English
+  photoURL?: string;
+  notificationsEnabled?: boolean;
   createdAt: number;
   totalCases: number;
   totalDocs: number;
@@ -104,6 +106,11 @@ export interface LanguageStrings {
   noCases: string;
   startNewCase: string;
   stepsCompleted: string;
+  deleteCase: string;
+  deleteCaseConfirm: string;
+  cancel: string;
+  delete: string;
+  noCasesHint: string;
   
   // Vault
   documentVault: string;
@@ -125,4 +132,9 @@ export interface LanguageStrings {
   logout: string;
   cases: string;
   docs: string;
+  you: string;
+  vakilSahab: string;
+  uploadPhotoSuccess: string;
+  uploadPhotoFailed: string;
+  languageChanged: string;
 }

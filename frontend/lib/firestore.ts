@@ -8,11 +8,9 @@ import {
   getDocs,
   query,
   where,
-  orderBy,
   addDoc,
   deleteDoc,
   arrayUnion,
-  Timestamp,
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { UserProfile, Case, Message, VaultFile } from '../types';
@@ -29,6 +27,8 @@ export async function createUserProfile(uid: string, profileData: Partial<UserPr
     district: profileData.district || 'Nagpur',
     dateOfBirth: profileData.dateOfBirth || '',
     language: profileData.language || 'mr',
+    photoURL: profileData.photoURL || '',
+    notificationsEnabled: profileData.notificationsEnabled ?? false,
     createdAt: Date.now(),
     totalCases: 0,
     totalDocs: 0,
@@ -103,19 +103,27 @@ export async function updateCase(caseId: string, data: Partial<Case>) {
   });
 }
 
+export async function deleteCase(userId: string, caseId: string) {
+  const caseRef = doc(db, 'cases', caseId);
+  await deleteDoc(caseRef);
+
+  const userRef = doc(db, 'users', userId);
+  const userSnap = await getDoc(userRef);
+  if (userSnap.exists()) {
+    const currentTotal = userSnap.data().totalCases || 0;
+    await updateDoc(userRef, { totalCases: Math.max(0, currentTotal - 1) });
+  }
+}
+
 export async function getUserCases(userId: string): Promise<Case[]> {
   const casesRef = collection(db, 'cases');
-  const q = query(
-    casesRef,
-    where('userId', '==', userId),
-    orderBy('updatedAt', 'desc')
-  );
+  const q = query(casesRef, where('userId', '==', userId));
   const querySnapshot = await getDocs(q);
   const cases: Case[] = [];
   querySnapshot.forEach((doc) => {
     cases.push({ caseId: doc.id, ...doc.data() } as Case);
   });
-  return cases;
+  return cases.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 }
 
 export async function addMessageToCase(caseId: string, message: Message) {
@@ -165,17 +173,13 @@ export async function uploadVaultFile(
 
 export async function getUserVaultFiles(userId: string): Promise<VaultFile[]> {
   const vaultRef = collection(db, 'vault');
-  const q = query(
-    vaultRef,
-    where('userId', '==', userId),
-    orderBy('uploadedAt', 'desc')
-  );
+  const q = query(vaultRef, where('userId', '==', userId));
   const querySnapshot = await getDocs(q);
   const files: VaultFile[] = [];
   querySnapshot.forEach((doc) => {
     files.push({ fileId: doc.id, ...doc.data() } as VaultFile);
   });
-  return files;
+  return files.sort((a, b) => (b.uploadedAt || 0) - (a.uploadedAt || 0));
 }
 
 export async function deleteVaultFile(userId: string, fileId: string, downloadURL: string) {

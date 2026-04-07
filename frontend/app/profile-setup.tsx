@@ -175,10 +175,11 @@ export default function ProfileSetupScreen() {
                 selectedValue={district}
                 onValueChange={(value) => setDistrict(value)}
                 style={styles.picker}
+                mode="dialog"
                 dropdownIconColor="#FF6B00"
               >
                 {MAHARASHTRA_DISTRICTS.map((d) => (
-                  <Picker.Item key={d} label={d} value={d} color="#FFF" />
+                  <Picker.Item key={d} label={d} value={d} color="#111111" />
                 ))}
               </Picker>
             </View>

@@ -30,6 +30,12 @@ export default function VerifyOTPScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleVerify = async () => {
+    if (!params.email) {
+      Alert.alert('त्रुटी', 'ईमेल माहिती उपलब्ध नाही. कृपया पुन्हा साइन अप करा.');
+      router.replace('/signup');
+      return;
+    }
+
     if (!password || !confirmPassword) {
       Alert.alert('त्रुटी', 'कृपया पासवर्ड प्रविष्ट करा');
       return;

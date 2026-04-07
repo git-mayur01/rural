@@ -26,21 +26,39 @@ const AppLayoutWrapper: React.FC<Props> = ({ children }) => {
         setUserProfile(profile);
 
         // Routing logic
-        if (!profile && pathname !== '/signup' && pathname !== '/verify-otp' && pathname !== '/profile-setup') {
-          router.replace('/signup');
-        } else if (profile && (pathname === '/' || pathname === '/auth' || pathname === '/signup' || pathname === '/verify-otp')) {
+        if (
+          !profile &&
+          pathname !== '/profile-setup' &&
+          pathname !== '/signup' &&
+          pathname !== '/verify-otp'
+        ) {
+          router.replace('/profile-setup');
+        } else if (
+          profile &&
+          (pathname === '/' ||
+            pathname === '/auth' ||
+            pathname === '/signup' ||
+            pathname === '/verify-otp')
+        ) {
           router.replace('/chat');
         }
       } else {
+        setUserProfile(null);
         // Not logged in
-        if (pathname !== '/auth' && pathname !== '/signup' && pathname !== '/verify-otp' && pathname !== '/forgot-password' && pathname !== '/') {
+        if (
+          pathname !== '/auth' &&
+          pathname !== '/signup' &&
+          pathname !== '/verify-otp' &&
+          pathname !== '/forgot-password' &&
+          pathname !== '/'
+        ) {
           router.replace('/auth');
         }
       }
     });
 
     return () => unsubscribe();
-  }, [pathname]);
+  }, [pathname, router, setUser, setUserProfile]);
 
   return (
     <View style={styles.container}>

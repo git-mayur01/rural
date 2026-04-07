@@ -42,6 +42,11 @@ const marathi: LanguageStrings = {
   noCases: 'अद्याप प्रकरण नाहीत',
   startNewCase: 'नवीन प्रकरण सुरू करा',
   stepsCompleted: 'पायऱ्या पूर्ण',
+  deleteCase: 'प्रकरण हटवा',
+  deleteCaseConfirm: 'हे प्रकरण कायमचे हटवायचे आहे का?',
+  cancel: 'रद्द करा',
+  delete: 'हटवा',
+  noCasesHint: 'वकील साहब AI ला तुमची समस्या सांगून सुरुवात करा',
   
   // Vault
   documentVault: 'कागदपत्र तिजोरी',
@@ -63,6 +68,11 @@ const marathi: LanguageStrings = {
   logout: 'लॉगआउट',
   cases: 'प्रकरणे',
   docs: 'कागदपत्रे',
+  you: 'तुम्ही',
+  vakilSahab: 'वकील साहब',
+  uploadPhotoSuccess: 'प्रोफाइल फोटो अपडेट झाला.',
+  uploadPhotoFailed: 'फोटो अपलोड करण्यात अयशस्वी',
+  languageChanged: 'भाषा अपडेट झाली.',
 };
 
 // Hindi strings (secondary)
@@ -107,6 +117,11 @@ const hindi: LanguageStrings = {
   noCases: 'अभी तक कोई मामला नहीं',
   startNewCase: 'नया मामला शुरू करें',
   stepsCompleted: 'कदम पूरे',
+  deleteCase: 'मामला हटाएं',
+  deleteCaseConfirm: 'क्या आप इस मामले को स्थायी रूप से हटाना चाहते हैं?',
+  cancel: 'रद्द करें',
+  delete: 'हटाएं',
+  noCasesHint: 'वकील साहब AI को अपनी समस्या बताकर शुरुआत करें',
   
   // Vault
   documentVault: 'दस्तावेज़ तिजोरी',
@@ -128,6 +143,11 @@ const hindi: LanguageStrings = {
   logout: 'लॉगआउट',
   cases: 'मामले',
   docs: 'दस्तावेज़',
+  you: 'आप',
+  vakilSahab: 'वकील साहब',
+  uploadPhotoSuccess: 'प्रोफाइल फोटो अपडेट हो गया।',
+  uploadPhotoFailed: 'फोटो अपलोड विफल',
+  languageChanged: 'भाषा अपडेट हुई।',
 };
 
 // English strings (tertiary)
@@ -172,6 +192,11 @@ const english: LanguageStrings = {
   noCases: 'No cases yet',
   startNewCase: 'Start New Case',
   stepsCompleted: 'steps completed',
+  deleteCase: 'Delete Case',
+  deleteCaseConfirm: 'Do you want to permanently delete this case?',
+  cancel: 'Cancel',
+  delete: 'Delete',
+  noCasesHint: 'Start by describing your problem to Vakil Sahab AI',
   
   // Vault
   documentVault: 'Document Vault',
@@ -193,6 +218,11 @@ const english: LanguageStrings = {
   logout: 'LOGOUT',
   cases: 'CASES',
   docs: 'DOCS',
+  you: 'You',
+  vakilSahab: 'Vakil Sahab',
+  uploadPhotoSuccess: 'Profile photo updated successfully.',
+  uploadPhotoFailed: 'Failed to upload profile photo',
+  languageChanged: 'Language updated successfully.',
 };
 
 const languages: Record<Language, LanguageStrings> = {

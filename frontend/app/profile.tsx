@@ -6,7 +6,8 @@ import {
   StyleSheet,
   ScrollView,
   Switch,
-  Alert,
+  Image,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,77 +16,133 @@ import { signOut } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { useAppStore } from '../store/useAppStore';
 import { getLanguageStrings } from '../lib/languages';
-import { updateUserProfile } from '../lib/firestore';
+import { getUserCases, getUserVaultFiles, updateUserProfile } from '../lib/firestore';
+import * as ImagePicker from 'expo-image-picker';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { storage } from '../lib/firebase';
+import ThemedModal from '../components/ThemedModal';
 
 export default function ProfileScreen() {
   const router = useRouter();
   const { user, userProfile, language, setLanguage, resetAll } = useAppStore();
   const strings = getLanguageStrings(language);
-  const [notificationsEnabled, setNotificationsEnabled] = React.useState(false);
+  const { setUserProfile } = useAppStore();
+  const [notificationsEnabled, setNotificationsEnabled] = React.useState(userProfile?.notificationsEnabled ?? false);
+  const [casesCount, setCasesCount] = React.useState(0);
+  const [docsCount, setDocsCount] = React.useState(0);
+  const [isUploadingPhoto, setIsUploadingPhoto] = React.useState(false);
+  const [languageModalVisible, setLanguageModalVisible] = React.useState(false);
+  const [feedbackModal, setFeedbackModal] = React.useState<{ visible: boolean; title: string; message: string }>({
+    visible: false,
+    title: '',
+    message: '',
+  });
+
+  React.useEffect(() => {
+    const loadCounts = async () => {
+      if (!user) return;
+      try {
+        const [cases, docs] = await Promise.all([getUserCases(user.uid), getUserVaultFiles(user.uid)]);
+        setCasesCount(cases.length);
+        setDocsCount(docs.length);
+      } catch (error) {
+        console.log('Error loading profile counts:', error);
+      }
+    };
+    loadCounts();
+  }, [user]);
+
+  React.useEffect(() => {
+    setNotificationsEnabled(userProfile?.notificationsEnabled ?? false);
+  }, [userProfile?.notificationsEnabled]);
 
   const getInitials = () => {
-    if (!userProfile) return 'U';
-    return `${userProfile.firstName[0]}${userProfile.surname[0]}`.toUpperCase();
+    const first = userProfile?.firstName?.[0] || '';
+    const last = userProfile?.surname?.[0] || '';
+    const initials = `${first}${last}`.toUpperCase();
+    return initials || 'U';
   };
+  const handleProfilePhotoUpload = async () => {
+    if (!user || !userProfile) return;
+    setIsUploadingPhoto(true);
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setFeedbackModal({
+        visible: true,
+        title: 'परवानगी आवश्यक',
+        message: 'प्रोफाइल फोटो अपलोड करण्यासाठी गॅलरी परवानगी द्या.',
+      });
+      setIsUploadingPhoto(false);
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      quality: 0.7,
+      aspect: [1, 1],
+    });
+
+    if (result.canceled || !result.assets?.length) {
+      setIsUploadingPhoto(false);
+      return;
+    }
+
+    try {
+      const uri = result.assets[0].uri;
+      const res = await fetch(uri);
+      const blob = await res.blob();
+      const imageRef = ref(storage, `users/${user.uid}/profile/profile.jpg`);
+      await uploadBytes(imageRef, blob);
+      const photoURL = await getDownloadURL(imageRef);
+      await updateUserProfile(user.uid, { photoURL });
+      setUserProfile({ ...userProfile, photoURL });
+      setFeedbackModal({
+        visible: true,
+        title: 'यश',
+        message: strings.uploadPhotoSuccess,
+      });
+    } catch (error: any) {
+      setFeedbackModal({
+        visible: true,
+        title: 'त्रुटी',
+        message:
+          error?.code === 'storage/unauthorized'
+            ? (language === 'en'
+                ? 'Upload denied by Storage rules. Allow authenticated writes in Firebase Storage rules.'
+                : 'Storage नियमांमुळे अपलोड नाकारले गेले. Firebase Storage rules मध्ये authenticated write परवानगी द्या.')
+            : error.message || strings.uploadPhotoFailed,
+      });
+    } finally {
+      setIsUploadingPhoto(false);
+    }
+  };
+
 
   const handleLogout = async () => {
-    Alert.alert(
-      'लॉगआउट',
-      'तुम्हाला खात्री आहे का तुम्ही लॉगआउट करू इच्छिता?',
-      [
-        { text: 'रद्द करा', style: 'cancel' },
-        {
-          text: 'लॉगआउट',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut(auth);
-              resetAll();
-              router.replace('/auth');
-            } catch (error: any) {
-              Alert.alert('त्रुटी', 'लॉगआउट करण्यात अयशस्वी: ' + error.message);
-            }
-          },
-        },
-      ]
-    );
+    setFeedbackModal({
+      visible: true,
+      title: 'लॉगआउट',
+      message: 'तुम्हाला खात्री आहे का तुम्ही लॉगआउट करू इच्छिता?',
+    });
   };
 
-  const handleLanguageChange = async () => {
-    Alert.alert(
-      'भाषा बदला',
-      'भाषा निवडा:',
-      [
-        {
-          text: 'मराठी',
-          onPress: async () => {
-            if (user && userProfile) {
-              await updateUserProfile(user.uid, { language: 'mr' });
-              setLanguage('mr');
-            }
-          },
-        },
-        {
-          text: 'हिंदी',
-          onPress: async () => {
-            if (user && userProfile) {
-              await updateUserProfile(user.uid, { language: 'hi' });
-              setLanguage('hi');
-            }
-          },
-        },
-        {
-          text: 'English',
-          onPress: async () => {
-            if (user && userProfile) {
-              await updateUserProfile(user.uid, { language: 'en' });
-              setLanguage('en');
-            }
-          },
-        },
-        { text: 'रद्द करा', style: 'cancel' },
-      ]
-    );
+  const handleLanguageChange = () => {
+    setLanguageModalVisible(true);
+  };
+
+  const selectLanguage = async (lang: 'mr' | 'hi' | 'en') => {
+    try {
+      if (user && userProfile) {
+        await updateUserProfile(user.uid, { language: lang });
+        setUserProfile({ ...userProfile, language: lang });
+      }
+      setLanguage(lang);
+      setLanguageModalVisible(false);
+    } catch (error: any) {
+      setLanguageModalVisible(false);
+      setFeedbackModal({ visible: true, title: 'त्रुटी', message: error.message || 'भाषा बदलण्यात अयशस्वी' });
+    }
   };
 
   const getLanguageName = () => {
@@ -114,12 +171,16 @@ export default function ProfileScreen() {
 
         {/* Profile Section */}
         <View style={styles.profileSection}>
-          <View style={styles.avatarLarge}>
-            <Text style={styles.avatarLargeText}>{getInitials()}</Text>
+          <TouchableOpacity style={styles.avatarLarge} onPress={handleProfilePhotoUpload} activeOpacity={0.8}>
+            {userProfile?.photoURL ? (
+              <Image source={{ uri: userProfile.photoURL }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarLargeText}>{getInitials()}</Text>
+            )}
             <View style={styles.verifiedBadge}>
               <Ionicons name="checkmark-circle" size={24} color="#FF6B00" />
             </View>
-          </View>
+          </TouchableOpacity>
           <Text style={styles.profileName}>
             {userProfile?.firstName} {userProfile?.surname}
           </Text>
@@ -131,38 +192,44 @@ export default function ProfileScreen() {
         {/* Stats */}
         <View style={styles.statsContainer}>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{userProfile?.totalCases || 0}</Text>
-            <Text style={styles.statLabel}>प्रकरणे</Text>
+            <Text style={styles.statNumber}>{casesCount}</Text>
+            <Text style={styles.statLabel}>{strings.cases}</Text>
           </View>
           <View style={styles.statCard}>
-            <Text style={styles.statNumber}>{userProfile?.totalDocs || 0}</Text>
-            <Text style={styles.statLabel}>कागदपत्रे</Text>
+            <Text style={styles.statNumber}>{docsCount}</Text>
+            <Text style={styles.statLabel}>{strings.docs}</Text>
           </View>
         </View>
 
         {/* Menu Items */}
         <View style={styles.menuContainer}>
-          <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/profile-setup')}>
+          <TouchableOpacity style={styles.menuItem} onPress={() => router.push('/edit-profile')}>
             <Ionicons name="person-outline" size={24} color="#FF6B00" />
-            <Text style={styles.menuText}>प्रोफाइल संपादित करा</Text>
+            <Text style={styles.menuText}>{strings.profileEditKarein}</Text>
             <Ionicons name="chevron-forward" size={20} color="#A0785A" />
           </TouchableOpacity>
 
           <TouchableOpacity style={styles.menuItem} onPress={handleLanguageChange}>
             <Ionicons name="language-outline" size={24} color="#FF6B00" />
             <View style={{ flex: 1 }}>
-              <Text style={styles.menuText}>भाषा: {getLanguageName()}</Text>
-              <Text style={styles.menuSubtext}>(बदला)</Text>
+              <Text style={styles.menuText}>{strings.language.replace(/:.*/, '')}: {getLanguageName()}</Text>
+              <Text style={styles.menuSubtext}>{strings.change}</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#A0785A" />
           </TouchableOpacity>
 
           <View style={styles.menuItem}>
             <Ionicons name="notifications-outline" size={24} color="#FF6B00" />
-            <Text style={styles.menuText}>सूचना</Text>
+            <Text style={styles.menuText}>{strings.notifications}</Text>
             <Switch
               value={notificationsEnabled}
-              onValueChange={setNotificationsEnabled}
+              onValueChange={async (value) => {
+                setNotificationsEnabled(value);
+                if (user && userProfile) {
+                  await updateUserProfile(user.uid, { notificationsEnabled: value });
+                  setUserProfile({ ...userProfile, notificationsEnabled: value });
+                }
+              }}
               trackColor={{ false: '#3A3A3A', true: '#FF6B00' }}
               thumbColor={notificationsEnabled ? '#FFF' : '#A0785A'}
             />
@@ -170,28 +237,28 @@ export default function ProfileScreen() {
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => Alert.alert('About NyAI-Setu', 'AI-powered legal guidance for rural Indian citizens.')}
+            onPress={() => router.push('/about')}
           >
             <Ionicons name="information-circle-outline" size={24} color="#FF6B00" />
-            <Text style={styles.menuText}>NyAI-Setu बद्दल</Text>
+            <Text style={styles.menuText}>{strings.aboutNyAISetu}</Text>
             <Ionicons name="chevron-forward" size={20} color="#A0785A" />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => Alert.alert('Privacy Policy', 'Your data is encrypted and secure.')}
+            onPress={() => router.push('/privacy')}
           >
             <Ionicons name="shield-checkmark-outline" size={24} color="#FF6B00" />
-            <Text style={styles.menuText}>गोपनीयता धोरण</Text>
+            <Text style={styles.menuText}>{strings.privacyPolicy}</Text>
             <Ionicons name="chevron-forward" size={20} color="#A0785A" />
           </TouchableOpacity>
 
           <TouchableOpacity
             style={styles.menuItem}
-            onPress={() => Alert.alert('Help & Support', 'DLSA Nagpur: 0712-2560123')}
+            onPress={() => router.push('/help-support')}
           >
             <Ionicons name="help-circle-outline" size={24} color="#FF6B00" />
-            <Text style={styles.menuText}>मदत आणि समर्थन</Text>
+            <Text style={styles.menuText}>{strings.helpSupport}</Text>
             <Ionicons name="chevron-forward" size={20} color="#A0785A" />
           </TouchableOpacity>
         </View>
@@ -199,9 +266,61 @@ export default function ProfileScreen() {
         {/* Logout Button */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={24} color="#FF6B00" />
-          <Text style={styles.logoutText}>लॉगआउट</Text>
+          <Text style={styles.logoutText}>{strings.logout}</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {isUploadingPhoto && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#FF6B00" />
+          <Text style={styles.loadingText}>फोटो अपलोड होत आहे...</Text>
+        </View>
+      )}
+
+      <ThemedModal
+        visible={languageModalVisible}
+        title={language === 'en' ? 'Change Language' : 'भाषा बदला'}
+        message={language === 'en' ? 'Select language:' : 'भाषा निवडा:'}
+        onClose={() => setLanguageModalVisible(false)}
+        actions={[
+          { label: 'मराठी', onPress: () => selectLanguage('mr'), variant: 'primary' },
+          { label: 'हिंदी', onPress: () => selectLanguage('hi'), variant: 'secondary' },
+          { label: 'English', onPress: () => selectLanguage('en'), variant: 'secondary' },
+          { label: 'रद्द करा', onPress: () => setLanguageModalVisible(false), variant: 'secondary' },
+        ]}
+      />
+
+      <ThemedModal
+        visible={feedbackModal.visible}
+        title={feedbackModal.title}
+        message={feedbackModal.message}
+        onClose={() => setFeedbackModal({ visible: false, title: '', message: '' })}
+        actions={
+          feedbackModal.title === 'लॉगआउट'
+            ? [
+                { label: 'रद्द करा', onPress: () => setFeedbackModal({ visible: false, title: '', message: '' }), variant: 'secondary' },
+                {
+                  label: 'लॉगआउट',
+                  onPress: async () => {
+                    try {
+                      await signOut(auth);
+                      resetAll();
+                      setFeedbackModal({ visible: false, title: '', message: '' });
+                      router.replace('/auth');
+                    } catch (error: any) {
+                      setFeedbackModal({
+                        visible: true,
+                        title: 'त्रुटी',
+                        message: 'लॉगआउट करण्यात अयशस्वी: ' + error.message,
+                      });
+                    }
+                  },
+                  variant: 'primary',
+                },
+              ]
+            : [{ label: 'OK', onPress: () => setFeedbackModal({ visible: false, title: '', message: '' }), variant: 'primary' }]
+        }
+      />
     </SafeAreaView>
   );
 }
@@ -245,6 +364,11 @@ const styles = StyleSheet.create({
     borderColor: '#FF6B00',
     marginBottom: 16,
     position: 'relative',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 60,
   },
   avatarLargeText: {
     fontSize: 48,
@@ -336,5 +460,17 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#FF6B00',
     letterSpacing: 1,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    color: '#FFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });

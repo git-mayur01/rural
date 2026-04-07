@@ -163,21 +163,43 @@ export async function sendLegalMessage(
   userLanguage: Language
 ): Promise<GeminiResponse> {
   try {
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      systemInstruction: LEGAL_SYSTEM_PROMPT,
-    });
+    const modelNames = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-1.5-flash-8b'];
 
     const history = messages.slice(0, -1).map((m) => ({
       role: m.role === 'user' ? 'user' : 'model',
       parts: [{ text: m.content }],
     }));
 
-    const chat = model.startChat({ history });
+    const languageInstruction =
+      userLanguage === 'mr'
+        ? 'User preferred language is Marathi. Respond in Marathi by default. If user explicitly uses Hindi, use Hindi. If user explicitly uses English, use English.'
+        : userLanguage === 'hi'
+          ? 'User preferred language is Hindi. Respond in Hindi by default unless user explicitly requests another language.'
+          : 'User preferred language is English. Respond in English by default unless user explicitly requests another language.';
 
     const lastMessage = messages[messages.length - 1].content;
-    const result = await chat.sendMessage(lastMessage);
-    const responseText = result.response.text();
+    const enrichedMessage = `${languageInstruction}\n\nUser message:\n${lastMessage}`;
+
+    let responseText = '';
+    let lastModelError: unknown = null;
+    for (const modelName of modelNames) {
+      try {
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: LEGAL_SYSTEM_PROMPT,
+        });
+        const chat = model.startChat({ history });
+        const result = await chat.sendMessage(enrichedMessage);
+        responseText = result.response.text();
+        if (responseText) break;
+      } catch (error) {
+        lastModelError = error;
+      }
+    }
+
+    if (!responseText) {
+      throw lastModelError || new Error('No Gemini response received');
+    }
 
     // Try to parse JSON from response
     try {

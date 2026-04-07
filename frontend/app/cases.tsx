@@ -1,20 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  ActivityIndicator,
-} from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { format } from 'date-fns';
+import { collection, deleteDoc, doc, getDocs, orderBy, query, updateDoc } from 'firebase/firestore';
 import { useAppStore } from '../store/useAppStore';
 import { getLanguageStrings } from '../lib/languages';
-import { getUserCases } from '../lib/firestore';
 import { Case } from '../types';
-import { format } from 'date-fns';
+import ThemedModal from '../components/ThemedModal';
+import { db } from '../lib/firebase';
 
 export default function CasesScreen() {
   const router = useRouter();
@@ -22,17 +17,39 @@ export default function CasesScreen() {
   const strings = getLanguageStrings(language);
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<Case | null>(null);
+  const [activeTabByCase, setActiveTabByCase] = useState<Record<string, 'chat' | 'summary' | 'steps'>>({});
 
   useEffect(() => {
     loadCases();
-  }, []);
+  }, [user]);
 
   const loadCases = async () => {
     if (!user) return;
     setLoading(true);
     try {
-      const userCases = await getUserCases(user.uid);
-      setCases(userCases);
+      const userCasesRef = collection(db, 'users', user.uid, 'cases');
+      const snap = await getDocs(query(userCasesRef, orderBy('updatedAt', 'desc')));
+      const mapped: Case[] = snap.docs.map((c) => {
+        const data = c.data() as any;
+        return {
+          caseId: c.id,
+          userId: user.uid,
+          title: data.title || 'Analyzing case...',
+          status: data.status || 'fact_gathering',
+          analysisProgress: data.progress || 0,
+          legalSections: data.legalSections || [],
+          actionSteps: Array.isArray(data.steps) ? data.steps.map((s: any) => s.title || '') : [],
+          caseStrength: data.caseStrength || 0,
+          messages: [],
+          documents: data.documents || { fir: '', nhrc: '', magistrate: '' },
+          createdAt: data.createdAt?.toMillis ? data.createdAt.toMillis() : Date.now(),
+          updatedAt: data.updatedAt?.toMillis ? data.updatedAt.toMillis() : Date.now(),
+          summary: data.summary || '',
+          steps: data.steps || [],
+        } as Case & { summary?: string; steps?: any[] };
+      });
+      setCases(mapped);
     } catch (error) {
       console.error('Error loading cases:', error);
     } finally {
@@ -40,29 +57,60 @@ export default function CasesScreen() {
     }
   };
 
-  const handleNewCase = () => {
+  const goToChat = () => {
     setCurrentCase(null);
+    setMessages([]);
     router.push('/chat');
   };
 
   const handleCasePress = (caseItem: Case) => {
     setCurrentCase(caseItem.caseId);
-    setMessages(caseItem.messages);
-    updateAnalysis(
-      caseItem.analysisProgress,
-      caseItem.legalSections,
-      caseItem.actionSteps,
-      caseItem.caseStrength,
-      caseItem.status
-    );
+    setMessages([]);
+    updateAnalysis(caseItem.analysisProgress, caseItem.legalSections, caseItem.actionSteps, caseItem.caseStrength, caseItem.status as any);
     setDocuments(caseItem.documents);
     router.push('/chat');
+  };
+
+  const handleDeleteCase = async () => {
+    if (!user || !deleteTarget) return;
+    const targetId = deleteTarget.caseId;
+    setCases((prev) => prev.filter((item) => item.caseId !== targetId));
+    setDeleteTarget(null);
+    try {
+      await deleteDoc(doc(db, 'users', user.uid, 'cases', targetId));
+    } catch (error) {
+      console.error('Delete failed, reloading cases:', error);
+      loadCases();
+    }
+  };
+
+  const toggleStep = async (caseItem: any, stepId: string) => {
+    if (!user) return;
+    const steps = Array.isArray(caseItem.steps) ? [...caseItem.steps] : [];
+    const nextSteps = steps.map((s: any) => (s.id === stepId ? { ...s, completed: !s.completed } : s));
+    const done = nextSteps.filter((s: any) => s.completed).length;
+    const progress = nextSteps.length ? Math.round((done / nextSteps.length) * 100) : 0;
+    await updateDoc(doc(db, 'users', user.uid, 'cases', caseItem.caseId), {
+      steps: nextSteps,
+      progress,
+      updatedAt: new Date(),
+    });
+    setCases((prev: any[]) => prev.map((c: any) => (c.caseId === caseItem.caseId ? { ...c, steps: nextSteps, analysisProgress: progress } : c)));
+  };
+
+  const closeCase = async (caseItem: any) => {
+    if (!user) return;
+    await updateDoc(doc(db, 'users', user.uid, 'cases', caseItem.caseId), {
+      status: 'completed',
+      updatedAt: new Date(),
+    });
+    setCases((prev: any[]) => prev.map((c: any) => (c.caseId === caseItem.caseId ? { ...c, status: 'completed' } : c)));
   };
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'fact_gathering':
-        return '#FF6B00';
+        return '#FF7A00';
       case 'analyzing':
         return '#FFB800';
       case 'action_plan_ready':
@@ -70,127 +118,130 @@ export default function CasesScreen() {
       case 'documents_ready':
         return '#00FF88';
       default:
-        return '#A0785A';
+        return '#B9A38F';
     }
   };
 
   const getStatusText = (status: string) => {
-    switch (status) {
-      case 'fact_gathering':
-        return 'तथ्य संकलन';
-      case 'analyzing':
-        return 'विश्लेषण';
-      case 'action_plan_ready':
-        return 'कृती योजना तयार';
-      case 'documents_ready':
-        return 'कागदपत्रे तयार';
-      default:
-        return status;
-    }
+    if (status === 'fact_gathering') return strings.statusFactGathering;
+    if (status === 'analyzing') return strings.statusAnalyzing;
+    if (status === 'action_plan_ready') return strings.statusActionPlanReady;
+    if (status === 'documents_ready') return strings.statusDocumentsReady;
+    return status;
   };
 
   const getInitials = () => {
     if (!userProfile) return 'U';
-    return `${userProfile.firstName[0]}${userProfile.surname[0]}`.toUpperCase();
+    const first = userProfile.firstName?.[0] || '';
+    const second = userProfile.surname?.[0] || '';
+    return `${first}${second}`.toUpperCase() || 'U';
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.logoContainer}>
-          <Ionicons name="scale" size={24} color="#FF6B00" />
+          <Ionicons name="scale" size={24} color="#FF7A00" />
           <Text style={styles.logoText}>NyAI-Setu</Text>
         </View>
-        <Text style={styles.headerTitle}>माझे प्रकरण</Text>
+        <Text style={styles.headerTitle}>{strings.myCases}</Text>
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>{getInitials()}</Text>
         </View>
       </View>
 
-      {/* New Case Button */}
-      <TouchableOpacity style={styles.newCaseButton} onPress={handleNewCase}>
-        <Ionicons name="add-circle" size={24} color="#000" />
-        <Text style={styles.newCaseButtonText}>+ नवीन प्रकरण</Text>
-      </TouchableOpacity>
-
-      {/* Cases List */}
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {loading ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#FF6B00" />
+            <ActivityIndicator size="large" color="#FF7A00" />
           </View>
         ) : cases.length === 0 ? (
           <View style={styles.emptyState}>
-            <Ionicons name="folder-open-outline" size={80} color="rgba(255, 107, 0, 0.3)" />
-            <Text style={styles.emptyTitle}>अद्याप प्रकरण नाहीत</Text>
-            <Text style={styles.emptyText}>
-              वकील साहब AI ला तुमची समस्या सांगून सुरुवात करा
-            </Text>
-            <TouchableOpacity style={styles.emptyButton} onPress={handleNewCase}>
-              <Text style={styles.emptyButtonText}>नवीन प्रकरण सुरू करा</Text>
+            <Ionicons name="folder-open-outline" size={80} color="rgba(255, 122, 0, 0.35)" />
+            <Text style={styles.emptyTitle}>{strings.noCases}</Text>
+            <Text style={styles.emptyText}>{strings.noCasesHint}</Text>
+            <TouchableOpacity style={styles.emptyButton} onPress={goToChat}>
+              <Text style={styles.emptyButtonText}>{strings.startNewCase}</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          cases.map((caseItem) => (
-            <TouchableOpacity
-              key={caseItem.caseId}
-              style={styles.caseCard}
-              onPress={() => handleCasePress(caseItem)}
-            >
+          cases.map((caseItem: any) => (
+            <TouchableOpacity key={caseItem.caseId} style={styles.caseCard} onPress={() => handleCasePress(caseItem)}>
               <View style={styles.caseHeader}>
                 <Text style={styles.caseTitle} numberOfLines={2}>
                   {caseItem.title}
                 </Text>
-                <View
-                  style={[
-                    styles.statusBadge,
-                    { backgroundColor: getStatusColor(caseItem.status) + '20' },
-                  ]}
-                >
-                  <Text style={[styles.statusText, { color: getStatusColor(caseItem.status) }]}>
-                    {getStatusText(caseItem.status)}
-                  </Text>
+                <Pressable onPress={(e) => { e.stopPropagation(); setDeleteTarget(caseItem); }} style={styles.deleteIcon}>
+                  <Ionicons name="trash-outline" size={18} color="#FF7A00" />
+                </Pressable>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(caseItem.status) + '20' }]}>
+                  <Text style={[styles.statusText, { color: getStatusColor(caseItem.status) }]}>{getStatusText(caseItem.status)}</Text>
                 </View>
               </View>
 
               <View style={styles.progressRow}>
-                <Text style={styles.progressText}>{caseItem.analysisProgress}% विश्लेषण</Text>
+                <Text style={styles.progressText}>{caseItem.analysisProgress}% {strings.analysis}</Text>
                 <View style={styles.progressBar}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { width: `${caseItem.analysisProgress}%` },
-                    ]}
-                  />
+                  <View style={[styles.progressFill, { width: `${caseItem.analysisProgress}%` }]} />
                 </View>
               </View>
 
-              {caseItem.legalSections.length > 0 && (
-                <View style={styles.sectionsContainer}>
-                  {caseItem.legalSections.slice(0, 3).map((section, index) => (
-                    <View key={index} style={styles.sectionPill}>
-                      <Text style={styles.sectionText}>{section}</Text>
-                    </View>
+              <View style={styles.tabsRow}>
+                {(['chat', 'summary', 'steps'] as const).map((tab) => (
+                  <Pressable
+                    key={tab}
+                    style={[styles.tabBtn, (activeTabByCase[caseItem.caseId] || 'chat') === tab && styles.tabBtnActive]}
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      setActiveTabByCase((prev) => ({ ...prev, [caseItem.caseId]: tab }));
+                    }}
+                  >
+                    <Text style={[styles.tabText, (activeTabByCase[caseItem.caseId] || 'chat') === tab && styles.tabTextActive]}>
+                      {tab === 'chat' ? 'Chat' : tab === 'summary' ? 'Summary' : 'Steps'}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {(activeTabByCase[caseItem.caseId] || 'chat') === 'summary' && (
+                <Text style={styles.summaryText}>{caseItem.summary || '-'}</Text>
+              )}
+
+              {(activeTabByCase[caseItem.caseId] || 'chat') === 'steps' && (
+                <View style={styles.stepsWrap}>
+                  {(caseItem.steps || []).map((step: any) => (
+                    <Pressable key={step.id} style={styles.stepRow} onPress={(e) => { e.stopPropagation(); toggleStep(caseItem, step.id); }}>
+                      <Ionicons name={step.completed ? 'checkbox' : 'square-outline'} size={18} color="#FF7A00" />
+                      <Text style={styles.stepText}>{step.title}</Text>
+                    </Pressable>
                   ))}
-                  {caseItem.legalSections.length > 3 && (
-                    <Text style={styles.moreSections}>+{caseItem.legalSections.length - 3}</Text>
+                  {!!(caseItem.steps || []).length && (
+                    <TouchableOpacity style={styles.closeCaseBtn} onPress={(e) => { e.stopPropagation(); closeCase(caseItem); }}>
+                      <Text style={styles.closeCaseTxt}>Close Case</Text>
+                    </TouchableOpacity>
                   )}
                 </View>
               )}
 
               <View style={styles.caseFooter}>
-                <Text style={styles.footerText}>
-                  {format(caseItem.createdAt, 'dd MMM yyyy')}
-                </Text>
-                <Text style={styles.footerText}>
-                  {caseItem.actionSteps.length} पायऱ्या पूर्ण
-                </Text>
+                <Text style={styles.footerText}>{format(caseItem.createdAt, 'dd MMM yyyy')}</Text>
+                <Text style={styles.footerText}>{caseItem.actionSteps.length} {strings.stepsCompleted}</Text>
               </View>
             </TouchableOpacity>
           ))
         )}
       </ScrollView>
+
+      <ThemedModal
+        visible={!!deleteTarget}
+        title={strings.deleteCase}
+        message={strings.deleteCaseConfirm}
+        onClose={() => setDeleteTarget(null)}
+        actions={[
+          { label: strings.cancel, onPress: () => setDeleteTarget(null), variant: 'secondary' },
+          { label: strings.delete, onPress: handleDeleteCase, variant: 'primary' },
+        ]}
+      />
     </SafeAreaView>
   );
 }
@@ -198,7 +249,7 @@ export default function CasesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1A0A00',
+    backgroundColor: '#0E0E0E',
   },
   header: {
     flexDirection: 'row',
@@ -207,7 +258,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 107, 0, 0.2)',
+    borderBottomColor: 'rgba(255, 122, 0, 0.2)',
   },
   logoContainer: {
     flexDirection: 'row',
@@ -217,34 +268,34 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#FF6B00',
+    color: '#FF7A00',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#FF6B00',
+    color: '#FF7A00',
   },
   avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#2A1500',
+    backgroundColor: '#1A1A1A',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
-    borderColor: '#FF6B00',
+    borderColor: '#FF7A00',
   },
   avatarText: {
     fontSize: 14,
     fontWeight: 'bold',
-    color: '#FF6B00',
+    color: '#FF7A00',
   },
   newCaseButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    backgroundColor: '#FF6B00',
+    backgroundColor: '#FF7A00',
     marginHorizontal: 20,
     marginVertical: 16,
     paddingVertical: 16,
@@ -287,7 +338,7 @@ const styles = StyleSheet.create({
     maxWidth: '80%',
   },
   emptyButton: {
-    backgroundColor: '#FF6B00',
+    backgroundColor: '#FF7A00',
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 28,
@@ -299,18 +350,72 @@ const styles = StyleSheet.create({
     color: '#000',
   },
   caseCard: {
-    backgroundColor: '#2A1500',
+    backgroundColor: '#1A1A1A',
     borderRadius: 16,
     padding: 20,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: 'rgba(255, 107, 0, 0.3)',
+    borderColor: 'rgba(255, 122, 0, 0.35)',
   },
   caseHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 12,
+  },
+  deleteIcon: {
+    padding: 4,
+  },
+  tabsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  tabBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: '#2B2B2B',
+  },
+  tabBtnActive: {
+    backgroundColor: '#FF7A00',
+  },
+  tabText: {
+    color: '#D0D0D0',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  tabTextActive: {
+    color: '#000',
+  },
+  summaryText: {
+    color: '#E2E2E2',
+    fontSize: 13,
+    marginBottom: 10,
+  },
+  stepsWrap: {
+    marginBottom: 10,
+    gap: 8,
+  },
+  stepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  stepText: {
+    color: '#FFF',
+    flex: 1,
+  },
+  closeCaseBtn: {
+    marginTop: 8,
+    backgroundColor: '#2B2B2B',
+    borderRadius: 10,
+    alignItems: 'center',
+    paddingVertical: 10,
+  },
+  closeCaseTxt: {
+    color: '#FF7A00',
+    fontWeight: '700',
   },
   caseTitle: {
     flex: 1,

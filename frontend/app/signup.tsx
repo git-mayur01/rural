@@ -163,11 +163,12 @@ export default function SignUpScreen() {
                     selectedValue={village}
                     onValueChange={(value) => setVillage(value)}
                     style={styles.picker}
+                    mode="dialog"
                     dropdownIconColor="#FF6B00"
                     itemStyle={styles.pickerItem}
                   >
                     {villages.map((v) => (
-                      <Picker.Item key={v} label={v} value={v} color="#FFF" />
+                      <Picker.Item key={v} label={v} value={v} color="#111111" />
                     ))}
                   </Picker>
                 </View>
@@ -180,11 +181,12 @@ export default function SignUpScreen() {
                 selectedValue={city}
                 onValueChange={(value) => setCity(value)}
                 style={styles.picker}
+                mode="dialog"
                 dropdownIconColor="#FF6B00"
                 itemStyle={styles.pickerItem}
               >
                 {NAGPUR_CITIES.map((c) => (
-                  <Picker.Item key={c} label={c} value={c} color="#FFF" />
+                  <Picker.Item key={c} label={c} value={c} color="#111111" />
                 ))}
               </Picker>
             </View>
@@ -195,11 +197,12 @@ export default function SignUpScreen() {
                 selectedValue={district}
                 onValueChange={(value) => setDistrict(value)}
                 style={styles.picker}
+                mode="dialog"
                 dropdownIconColor="#FF6B00"
                 itemStyle={styles.pickerItem}
               >
                 {MAHARASHTRA_DISTRICTS.map((d) => (
-                  <Picker.Item key={d} label={d} value={d} color="#FFF" />
+                  <Picker.Item key={d} label={d} value={d} color="#111111" />
                 ))}
               </Picker>
             </View>
@@ -295,8 +298,8 @@ const styles = StyleSheet.create({
     height: 50,
   },
   pickerItem: {
-    backgroundColor: '#1A1A1A',
-    color: '#FFFFFF',
+    backgroundColor: '#1E1E1E',
+    color: '#111111',
   },
   stateDisplay: {
     backgroundColor: '#2A1500',
