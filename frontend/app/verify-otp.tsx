@@ -8,7 +8,6 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
-  ActivityIndicator,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -24,37 +23,13 @@ export default function VerifyOTPScreen() {
   const params = useLocalSearchParams();
   const { setUser, setUserProfile } = useAppStore();
 
-  const [otp, setOtp] = useState(['', '', '', '']);
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // In real implementation, OTP would be sent via email service
-  const DEMO_OTP = '1234'; // Demo OTP for testing
-
-  const handleOtpChange = (index: number, value: string) => {
-    if (value.length <= 1) {
-      const newOtp = [...otp];
-      newOtp[index] = value;
-      setOtp(newOtp);
-    }
-  };
-
   const handleVerify = async () => {
-    const enteredOtp = otp.join('');
-
-    if (enteredOtp.length !== 4) {
-      Alert.alert('त्रुटी', 'कृपया 4-अंकी OTP प्रविष्ट करा');
-      return;
-    }
-
-    if (enteredOtp !== DEMO_OTP) {
-      Alert.alert('चुकीचा OTP', 'तुम्ही प्रविष्ट केलेला OTP चुकीचा आहे. कृपया योग्य OTP प्रविष्ट करा.');
-      return;
-    }
-
     if (!password || !confirmPassword) {
       Alert.alert('त्रुटी', 'कृपया पासवर्ड प्रविष्ट करा');
       return;
@@ -72,7 +47,7 @@ export default function VerifyOTPScreen() {
 
     setLoading(true);
     try {
-      // Create Firebase user
+      // Create Firebase user with email and password
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         params.email as string,
@@ -98,6 +73,10 @@ export default function VerifyOTPScreen() {
     } catch (error: any) {
       if (error.code === 'auth/email-already-in-use') {
         Alert.alert('त्रुटी', 'हा ईमेल आधीच वापरला जात आहे');
+      } else if (error.code === 'auth/invalid-email') {
+        Alert.alert('त्रुटी', 'अवैध ईमेल पत्ता');
+      } else if (error.code === 'auth/weak-password') {
+        Alert.alert('त्रुटी', 'पासवर्ड खूप कमकुवत आहे');
       } else {
         Alert.alert('नोंदणी अयशस्वी', error.message);
       }
@@ -126,34 +105,19 @@ export default function VerifyOTPScreen() {
           </View>
 
           {/* Title */}
-          <Text style={styles.title}>Verify OTP</Text>
-          <Text style={styles.subtitle}>OTP आणि पासवर्ड सेट करा</Text>
+          <Text style={styles.title}>Set Password</Text>
+          <Text style={styles.subtitle}>आपला खाता सुरक्षित करा</Text>
 
           {/* Info Box */}
           <View style={styles.infoBox}>
             <Ionicons name="mail" size={24} color="#FF6B00" />
             <Text style={styles.infoText}>
-              OTP {params.email} वर पाठवली (Demo: 1234)
+              {params.email} साठी पासवर्ड सेट करा
             </Text>
           </View>
 
           {/* Form */}
           <View style={styles.form}>
-            <Text style={styles.label}>4-अंकी OTP प्रविष्ट करा</Text>
-            <View style={styles.otpContainer}>
-              {[0, 1, 2, 3].map((index) => (
-                <TextInput
-                  key={index}
-                  style={styles.otpBox}
-                  value={otp[index]}
-                  onChangeText={(value) => handleOtpChange(index, value)}
-                  keyboardType="number-pad"
-                  maxLength={1}
-                  placeholderTextColor="#A0785A"
-                />
-              ))}
-            </View>
-
             <Text style={styles.label}>पासवर्ड सेट करा</Text>
             <View style={styles.passwordContainer}>
               <TextInput
@@ -204,17 +168,15 @@ export default function VerifyOTPScreen() {
             <Ionicons name="shield-checkmark" size={80} color="rgba(255, 107, 0, 0.3)" />
           </View>
 
-          {/* Verify Button */}
+          {/* Create Account Button */}
           <TouchableOpacity
-            style={styles.verifyButton}
+            style={[styles.verifyButton, loading && styles.verifyButtonDisabled]}
             onPress={handleVerify}
             disabled={loading}
           >
-            {loading ? (
-              <ActivityIndicator color="#000" />
-            ) : (
-              <Text style={styles.verifyButtonText}>Verify</Text>
-            )}
+            <Text style={styles.verifyButtonText}>
+              {loading ? 'खाते तयार करत आहे...' : 'खाते तयार करा'}
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -283,24 +245,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
     letterSpacing: 1,
   },
-  otpContainer: {
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  otpBox: {
-    width: 64,
-    height: 64,
-    backgroundColor: '#2A1500',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 107, 0, 0.3)',
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFF',
-    textAlign: 'center',
-  },
   passwordContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -328,6 +272,9 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     paddingVertical: 16,
     alignItems: 'center',
+  },
+  verifyButtonDisabled: {
+    opacity: 0.6,
   },
   verifyButtonText: {
     fontSize: 18,

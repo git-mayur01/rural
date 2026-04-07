@@ -29,7 +29,6 @@ export default function SignUpScreen() {
 
   const [firstName, setFirstName] = useState('');
   const [surname, setSurname] = useState('');
-  const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
   const [dateOfBirth, setDateOfBirth] = useState('');
   const [pincode, setPincode] = useState('');
@@ -58,23 +57,23 @@ export default function SignUpScreen() {
   };
 
   const handleSubmit = () => {
-    if (!firstName || !surname || !mobile || !email || !dateOfBirth || !pincode || !village) {
+    if (!firstName || !surname || !email || !dateOfBirth || !pincode || !village) {
       Alert.alert('त्रुटी', 'कृपया सर्व फील्ड भरा');
       return;
     }
 
-    if (mobile.length !== 10) {
-      Alert.alert('त्रुटी', 'कृपया वैध 10 अंकी मोबाइल नंबर प्रविष्ट करा');
+    // Validate email
+    if (!email.includes('@')) {
+      Alert.alert('त्रुटी', 'कृपया वैध ईमेल पत्ता प्रविष्ट करा');
       return;
     }
 
-    // Store signup data and navigate to OTP verification
+    // Navigate to password setup
     router.push({
       pathname: '/verify-otp',
       params: {
         firstName,
         surname,
-        mobile,
         email,
         dateOfBirth,
         pincode,
@@ -129,16 +128,6 @@ export default function SignUpScreen() {
 
             <TextInput
               style={styles.input}
-              placeholder="मोबाइल नंबर (10 digits)"
-              placeholderTextColor="#A0785A"
-              value={mobile}
-              onChangeText={setMobile}
-              keyboardType="phone-pad"
-              maxLength={10}
-            />
-
-            <TextInput
-              style={styles.input}
               placeholder="ईमेल पत्ता"
               placeholderTextColor="#A0785A"
               value={email}
@@ -175,6 +164,7 @@ export default function SignUpScreen() {
                     onValueChange={(value) => setVillage(value)}
                     style={styles.picker}
                     dropdownIconColor="#FF6B00"
+                    itemStyle={styles.pickerItem}
                   >
                     {villages.map((v) => (
                       <Picker.Item key={v} label={v} value={v} color="#FFF" />
@@ -191,6 +181,7 @@ export default function SignUpScreen() {
                 onValueChange={(value) => setCity(value)}
                 style={styles.picker}
                 dropdownIconColor="#FF6B00"
+                itemStyle={styles.pickerItem}
               >
                 {NAGPUR_CITIES.map((c) => (
                   <Picker.Item key={c} label={c} value={c} color="#FFF" />
@@ -205,6 +196,7 @@ export default function SignUpScreen() {
                 onValueChange={(value) => setDistrict(value)}
                 style={styles.picker}
                 dropdownIconColor="#FF6B00"
+                itemStyle={styles.pickerItem}
               >
                 {MAHARASHTRA_DISTRICTS.map((d) => (
                   <Picker.Item key={d} label={d} value={d} color="#FFF" />
@@ -299,7 +291,12 @@ const styles = StyleSheet.create({
   },
   picker: {
     color: '#FFF',
+    backgroundColor: '#2A1500',
     height: 50,
+  },
+  pickerItem: {
+    backgroundColor: '#1A1A1A',
+    color: '#FFFFFF',
   },
   stateDisplay: {
     backgroundColor: '#2A1500',
